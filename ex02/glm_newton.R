@@ -101,7 +101,7 @@ while (!converged) {
 glm_beta <- glm(y ~ 0 + X, family = binomial())$coefficients
 
 # Plot comparison
-png("./Desktop/Sp22/modeling/SDS383c/ex02/newons_method.png")
+png("./Desktop/Sp22/modeling/SDS383c/ex02/newtons_method.png")
 plot(llchain, type = "l", ylab="log likelihood", main="Log likelihood Newton's Method")
 abline(h = loglik(glm_beta), col = "red")
 dev.off()
