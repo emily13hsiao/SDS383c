@@ -78,7 +78,7 @@ theta_df <- data.frame(theta)
 theta_df$iteration <- 1:n_iter
 
 ggplot(gibbs) +
-  geom_line(aes(x=iterations, y=mu))
+  geom_line(aes(x=iterations, y=tau.sq))
 ggsave("./modeling/SDS383c/ex04/sigma_trace.png")
 
 ggplot(theta_df) +

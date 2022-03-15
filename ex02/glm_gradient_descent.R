@@ -39,20 +39,32 @@ loglik <- function(beta) {
   -sum(sapply(1:n, function(i) Y[i]*(X[i,]%*%beta) - b(X[i,]%*%beta)))
 }
 
-optim_beta <- optim(beta, loglik)$par
-
 converged <- FALSE
 iteration <- 1
-lik <- Inf
 tol <- 10e-5
 beta <- rep(1, 11)
+ll <- loglik(beta)
+llchain <- c(ll)
 
 while (!converged) {
   prev_beta <- beta
+  ll_prev <- ll
   beta <- beta + 0.0001 * score(beta)
   if (norm(as.matrix(beta-prev_beta)) < tol) {
     converged <- TRUE
   }
+  llchain <- c(llchain, -loglik(beta))
 }
+
+glm_beta <- glm(Y ~ 0 + X, family = binomial())$coefficients
+
+# Plot comparison
+png("./Desktop/Sp22/modeling/SDS383c/ex02/gradient_descent.png")
+plot(llchain, type = "l", 
+     ylab="log likelihood", 
+     main="Log likelihood Gradient Descent",
+     ylim = c(-200, -50))
+abline(h = -loglik(glm_beta), col = "red")
+dev.off()
 
 
