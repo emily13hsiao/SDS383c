@@ -332,3 +332,106 @@ for (b_i in b) {
   ggsave(filename=paste("./Desktop/Sp22/modeling/SDS383c/ex06/matern52", plot_title,sep=""),
          plot=p)
 }
+
+data <- read.csv("./Desktop/Sp22/modeling/SDS383D-master/data/utilities.csv")
+y <- data$gasbill/data$billingdays
+x <- data$temp
+n <- length(x)
+
+# Creates entire squared-exponential covariance matrix
+# why doesn't mine work?
+matern_covariance <- function(x, b, tau1.sq, tau2.sq) {
+  eucDist = as.matrix(dist(x,diag=T,upper=T))
+  kron.delta = diag(nrow=length(x))
+  tau1.sq*exp(-.5*(eucDist/b)^2) + tau2.sq*kron.delta
+}
+
+# Parameters
+tau2 = 10e-6
+b = c(3, 10, 15)
+tau1 = c(1, 5, 10)
+s2 = 0.61 # from in class
+
+for(i in 1:length(tau1)){
+  for(j in 1:length(b)){
+    
+    # create matern matrix
+    C = matern_covariance(x, b[j], tau1[i], tau2)
+    
+    post.mean = solve(diag(n) + s2*solve(C)) %*% y
+    post.var = solve(diag(n)/s2 + solve(C)) 
+    lower <- post.mean - 1.96*sqrt(diag(post.var))
+    upper <- post.mean + 1.96*sqrt(diag(post.var))
+    
+    df <- data.frame(mean = post.mean, y = y, x = x, lower=lower, upper=upper)
+    title = paste("Confidence Interval with b = ", b[j], ", t1 = ", tau1[i], sep="")
+    p <- ggplot(df, aes(x = x, y = y)) + 
+      geom_point(color = "red", alpha = 0.8) + 
+      geom_ribbon(mapping = aes(ymin = lower, ymax = upper), alpha = 0.5) + 
+      geom_line(mapping = aes(x = x, y = post.mean), color = "blue") + 
+      ggtitle(title)
+    ggsave(filename=paste("./Desktop/Sp22/modeling/SDS383c/ex06/", title, ".jpg", sep=""),
+           plot=p)
+  }
+}
+
+log_lik <- function(tau1.sq, b) {
+  C <- matern_covariance(x, b, tau1.sq, 0) # get C
+  Sig <- C + s2*diag(n)
+  result <- -1/2*t(y)%*%solve(Sig)%*%y - 1/2*log(det(Sig)) - n/2*log(2*pi)
+  result[1,1]
+}
+
+tau1.sq = seq(0.001, 100, length.out=500)
+b = seq(0.001, 100, length.out=500)
+values = expand.grid(tau1.sq, b)
+
+# log_lik_vals <- sapply(1:dim(values)[1], 
+#                        function(i) log_lik(values[i, 1], values[i, 2])
+#                        )
+# Try with for loop and print to see if it's working...
+log_lik_vals <- rep(0, dim(values)[1])
+for (i in 1:dim(values)[1]) {
+  print(i)
+  log_lik_vals[i] = log_lik(values[i, 1], values[i, 2])
+}
+
+values$log_lik = log_lik_vals
+ggplot() + 
+  geom_contour_filled(data=values, mapping=aes(x=Var1, y=Var2, z=log_lik)) +
+  xlim(0, 100) +
+  ylim(0, 100) +
+  ggtitle("log likelihood") +
+  xlab("tau1") +
+  ylab("b")
+ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/log_likelihood_contour.jpg")
+
+# get index of max value of log likelihood
+idx = which(log_lik_vals == max(log_lik_vals))
+tau1.hat = values[idx, 1]
+b.hat = values[idx, 2]
+# 44.08874, 64.52941
+
+# Now plot the confidence interval with those values
+C = matern_covariance(x, b.hat, tau1.hat, 10e-6)
+post.mean = solve(diag(n) + s2*solve(C)) %*% y
+post.var = solve(diag(n)/s2 + solve(C)) 
+lower <- post.mean - 1.96*sqrt(diag(post.var))
+upper <- post.mean + 1.96*sqrt(diag(post.var))
+
+df <- data.frame(mean = post.mean, y = y, x = x, lower=lower, upper=upper)
+title = paste("Confidence interval max likelihood")
+p <- ggplot(df, aes(x = x, y = y)) + 
+  geom_point(color = "red", alpha = 0.8) + 
+  geom_ribbon(mapping = aes(ymin = lower, ymax = upper), alpha = 0.5) + 
+  geom_line(mapping = aes(x = x, y = post.mean), color = "blue") + 
+  ggtitle(title)
+print(p)
+ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/confidence_interval_mle.jpg",
+       plot=p)
+
+
+
+
+
+
