@@ -341,9 +341,9 @@ n <- length(x)
 # Creates entire squared-exponential covariance matrix
 # why doesn't mine work?
 matern_covariance <- function(x, b, tau1.sq, tau2.sq) {
-  eucDist = as.matrix(dist(x,diag=T,upper=T))
-  kron.delta = diag(nrow=length(x))
-  tau1.sq*exp(-.5*(eucDist/b)^2) + tau2.sq*kron.delta
+  eucDist = as.matrix(dist(x, diag=T, upper=T))
+  kron.delta = diag(nrow=dim(X)[1])
+  tau1.sq*exp(-0.5*(eucDist/b)^2) + tau2.sq*kron.delta
 }
 
 # Parameters
@@ -429,6 +429,140 @@ p <- ggplot(df, aes(x = x, y = y)) +
 print(p)
 ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/confidence_interval_mle.jpg",
        plot=p)
+
+###################################### 
+####           Weather            ####
+###################################### 
+
+log_lik_weather <- function(tau1.sq, b, y) {
+  C <- matern_covariance(X, b, tau1.sq, 0) # get C
+  Sig <- C + s2*diag(157)
+  result <- -1/2*t(y)%*%solve(Sig)%*%y - 1/2*log(det(Sig)) - n/2*log(2*pi)
+  result[1,1]
+}
+
+data <- read.csv("./Desktop/Sp22/modeling/SDS383D-master/data/weather.csv")
+y1 <- data$pressure # pressure
+y2 <- data$temperature # temperature
+X <- data[, c(3, 4)] # longitude and latitude
+
+# Temperature
+# first find optimal hyperparameters
+b.temp <- seq(0.01, 100, length.out = 100)
+t1.temp <- seq(0.01, 100, length.out = 100)
+temp.grid <- expand.grid(b.temp, t1.temp)
+loglike.temp <- rep(0, dim(temp.grid)[1])
+for (i in 1:dim(temp.grid)[1]) {
+  print(i)
+  C = matern_covariance(X, temp.grid[i, 1], temp.grid[i, 2], 10e-6)
+  loglike.temp[i] = log_lik_weather(temp.grid[i, 1], temp.grid[i, 2], y2)
+}
+temp.grid$loglik = loglike.temp
+# contour plot of log likelihood 
+ggplot() + 
+  geom_contour_filled(data=temp.grid, mapping=aes(x=Var1, y=Var2, z=loglik)) +
+  xlim(0, 100) +
+  ylim(0, 100) +
+  ggtitle("log likelihood") +
+  xlab("b") +
+  ylab("t1")
+ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/temp_loglikelihood.jpg")
+# Now find posterior mean and SD using optimal hyperparameters
+idx.temp = which(temp.grid$loglik == max(temp.grid$loglik))
+b.temp.opt = temp.grid[idx.temp, 1] # 10.11
+t1.temp.opt = temp.grid[idx.temp, 2] # 1.02
+C.temp = matern_covariance(X, b.temp.opt, t1.temp.opt, 10e-6)
+
+# Grid for contour plot
+x_lon <- seq(min(X[,1]), max(X[,1]), length.out = 200)
+x_lat <- seq(min(X[,2]), max(X[,2]), length.out = 200)
+X_grid <- expand.grid(x_lon, x_lat) 
+
+# Function to calculate C(x,x^*)
+C_tilde <- function(X, Xstar, b, tau1sq, tau2sq){
+  d1 = (X[,1] - Xstar[,1])
+  d2 = (X[,2] - Xstar[,2])
+  tau1sq*exp(-.5*((d1/as.numeric(b))^2+ (d2/as.numeric(b))^2))
+}
+
+fhat = rep(0, dim(X_grid)[1])
+variances = rep(0, dim(X_grid)[1])
+Cinv <- solve(C.temp + s2*diag(157))
+for (i in 1:nrow(X_grid)){
+  Ctilde <- C_tilde(X, X_grid[i,], b.temp.opt, t1.temp.opt, 10e-6)
+  Cstar <- C_tilde(X_grid[i,], X_grid[i,], b.temp.opt, t1.temp.opt, 10e-6)
+  fhat[i] <- Ctilde%*%Cinv%*%as.matrix(y2,ncol=1)
+  variances[i] <- Cstar - Ctilde%*%Cinv%*%matrix(Ctilde,ncol=1)
+}
+
+# Now make contour plot - not sure how to include the variances?
+X_grid$mean = fhat
+ggplot() + 
+  geom_contour_filled(data=X_grid, mapping=aes(x=Var1, y=Var2, z=mean)) +
+  xlim(min(X[,1]), max(X[,1])) +
+  ylim(min(X[,2]), max(X[,2])) +
+  ggtitle("posterior mean") +
+  xlab("longitude") +
+  ylab("latitude")
+ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/temp_contour.jpg")
+
+
+
+
+
+
+# Now do the same for pressure . . . mostly copying code but changing to y1
+
+
+
+
+
+# first find optimal hyperparameters
+b.pres <- seq(0.01, 100, length.out = 100)
+t1.pres <- seq(0.01, 100, length.out = 100)
+pres.grid <- expand.grid(b.pres, t1.pres)
+loglike.pres <- rep(0, dim(pres.grid)[1])
+for (i in 1:dim(pres.grid)[1]) {
+  print(i)
+  C = matern_covariance(X, pres.grid[i, 1], pres.grid[i, 2], 10e-6)
+  loglike.pres[i] = log_lik_weather(pres.grid[i, 1], pres.grid[i, 2], y1)
+}
+pres.grid$loglik = loglike.pres
+# contour plot of log likelihood 
+ggplot() + 
+  geom_contour_filled(data=pres.grid, mapping=aes(x=Var1, y=Var2, z=loglik)) +
+  xlim(0, 100) +
+  ylim(0, 100) +
+  ggtitle("log likelihood pressure") +
+  xlab("b") +
+  ylab("t1")
+ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/pres_loglikelihood.jpg")
+# Now find posterior mean and SD using optimal hyperparameters
+idx.pres = which(pres.grid$loglik == max(pres.grid$loglik))
+b.pres.opt = pres.grid[idx.pres, 1] # 90.91
+t1.pres.opt = pres.grid[idx.pres, 2] # 0.01 ? seems wrong...
+C.pres = matern_covariance(X, b.pres.opt, t1.pres.opt, 10e-6)
+
+fhat.pres = rep(0, dim(X_grid)[1])
+variances.pres = rep(0, dim(X_grid)[1])
+Cinv.pres <- solve(C.pres + s2*diag(157))
+for (i in 1:nrow(X_grid)){
+  Ctilde <- C_tilde(X, X_grid[i,], b.pres.opt, t1.pres.opt, 10e-6)
+  Cstar <- C_tilde(X_grid[i,], X_grid[i,], b.pres.opt, t1.pres.opt, 10e-6)
+  fhat.pres[i] <- Ctilde%*%Cinv.pres%*%as.matrix(y1,ncol=1)
+  variances.pres[i] <- Cstar - Ctilde%*%Cinv.pres%*%matrix(Ctilde,ncol=1)
+}
+
+# Now make contour plot - not sure how to include the variances?
+X_grid$mean.press = fhat.pres
+ggplot() + 
+  geom_contour_filled(data=X_grid, mapping=aes(x=Var1, y=Var2, z=mean.press)) +
+  xlim(min(X[,1]), max(X[,1])) +
+  ylim(min(X[,2]), max(X[,2])) +
+  ggtitle("posterior mean") +
+  xlab("longitude") +
+  ylab("latitude")
+ggsave("./Desktop/Sp22/modeling/SDS383c/ex06/pressure_contour.jpg")
 
 
 
